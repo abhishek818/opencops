@@ -31,6 +31,7 @@ func main() {
 		"starting opencops",
 		slog.String("env", cfg.Env),
 		slog.String("http_addr", cfg.HTTPAddr),
+		slog.Bool("auto_migrate", cfg.AutoMigrate),
 	)
 
 	rootCtx, stop := signal.NotifyContext(
@@ -39,6 +40,19 @@ func main() {
 		syscall.SIGTERM,
 	)
 	defer stop()
+
+	if cfg.AutoMigrate {
+		migrationCtx, cancel := context.WithTimeout(rootCtx, 30*time.Second)
+		defer cancel()
+
+		if err := postgres.RunMigrations(migrationCtx, cfg.DatabaseURL, logger); err != nil {
+			logger.Error(
+				"failed to run database migrations",
+				slog.String("error", err.Error()),
+			)
+			os.Exit(1)
+		}
+	}
 
 	db, err := postgres.NewPool(rootCtx, cfg.DatabaseURL)
 	if err != nil {
